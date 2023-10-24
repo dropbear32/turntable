@@ -1,0 +1,40 @@
+ifneq ($(OS),Windows_NT)
+	$(error The current OS is not Windows; please use Makefile instead.)
+else
+	detected_OS := Windows_NT
+endif
+
+CC                = clang
+CFLAGS            = -Wall -Wextra -Wpedantic -Werror-implicit-function-declaration -Wno-deprecated-declarations -std=c99 -D_CRT_SECURE_NO_WARNINGS
+LDFLAGS           = -lWs2_32 -lWinMM -lksuser
+BUILD_DIR        := build
+PLATFORM_LINUX   := src/audio/audio-linux.c
+PLATFORM_MACOS   := src/audio/audio-macos.c
+PLATFORM_WINDOWS := src/audio/audio-windows.c src/socket/winsockfix.c
+SRCFILES         := $(shell find src/ -type f -name '*.c' $$(printf "! -wholename %s " $(PLATFORM_LINUX)) $$(printf "! -wholename %s " $(PLATFORM_MACOS)) $$(printf "! -wholename %s " $(PLATFORM_WINDOWS)))
+SRCFILES         += $(PLATFORM_WINDOWS)
+OBJFILES         := $(patsubst src/%.c,build/%.o,$(SRCFILES))
+
+ifeq ($(DEBUG),1)
+	CFLAGS += -g
+endif
+
+$(shell mkdir -p $(BUILD_DIR))
+
+$(BUILD_DIR)/%.o: src/%.c
+	@cobj='$@'; mkdir -p $${cobj%/*}
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+all: $(OBJFILES)
+	ar rcs $(BUILD_DIR)/turntable.lib $^
+	cp src/turntable.h build/
+ifneq ($(DEBUG),1)
+	rm $^ && find $(BUILD_DIR)/* -maxdepth 0 -type d -exec rm -r "{}" \;
+endif
+
+demo: all
+	$(CC) -o $(BUILD_DIR)/$@.exe example/turntable-demo.c -Lbuild/ -lturntable $(CFLAGS) $(LDFLAGS) 
+
+.PHONY: clean
+clean:
+	rm -r build/
